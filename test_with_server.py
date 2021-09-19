@@ -23,7 +23,10 @@ test in this way, now just skip it and test by manually starting the webserver.
 
 # def test(start_server):
 def test_main_get():
-    _, output = subprocess.getstatusoutput("curl localhost:5000?city=Ning%20Bo -i -s")
+    # "-v" in curl shows the HTTP request headers, among response process
+    # normally when we use "-v", we don't need "-i", because the response is already included
+    _, output = subprocess.getstatusoutput("curl localhost:5000?city=Ning%20Bo -v -s")
+
     assert "Content-Type: text/plain" in output
     assert "Received a GET, with URL parameters: {'city': 'Ning Bo'}" in output
 
@@ -40,9 +43,15 @@ def test_fake_baidu_get():
     assert "百度一下，你就知道" in output
 
 
-def test_modify_cookie():
+def test_modify_cookie_get():
     _, output = subprocess.getstatusoutput("curl --cookie 'k1=v1; k2=v2; k3=v3' localhost:5000/modify_cookie -i -s")
+
     assert "Set-Cookie: k1=hahaha%2C%20things%20are%20mixed%20up%21" in output
+
+
+def test_download_file_get():
+    _, output = subprocess.getstatusoutput("curl localhost:5000/download_file -i -s")
+    assert "Content-Type: application/octet-stream" in output
 
 
 def test_encrypt_cookie():

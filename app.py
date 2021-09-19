@@ -1,7 +1,7 @@
 from typing import Dict, TypeVar, Union
 from slow_serv import slow_serv
 from slow_serv.resp.resp import Response
-from secret_cookie import do_encrypt, de_encrypt
+from slow_serv.secret_cookie import do_encrypt, de_encrypt
 import json
 import config
 
@@ -21,7 +21,7 @@ def main(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str, Response]
 def fake_baidu(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str, Response]:
     resp = Response()
 
-    with open("fake_baidu.html") as f:
+    with open("./static_files/fake_baidu.html") as f:
         data = f.read()
 
     resp.set_html(data)
@@ -37,12 +37,21 @@ def modify_cookie(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str, 
 
     return resp
 
+
+def download_file(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str, Response]:
+    resp = Response()
+    filename = "./static_files/amazing_file.txt"
+    with open(filename, "rb") as f:
+        resp.transform_file(f.read(), filename)
+    return resp
+
+
 def encrypt_cookie(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str, Response]:
     resp = Response()
 
     if not request["cookie"]:
-        request["cookie"] = {'1':'aa', '2':'bb', '3':'cc'}
-    
+        request["cookie"] = {"1": "aa", "2": "bb", "3": "cc"}
+
     cookie_str = json.dumps(request["cookie"])
     ciphertext, nonce = do_encrypt(cookie_str, config.SECRET_KEY)
     resp.add_cookie("encrypt_cookie", ciphertext.decode())
@@ -50,13 +59,14 @@ def encrypt_cookie(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str,
 
     return resp
 
+
 def show_encrypt_cookie(request: Dict[str, Union[Dict[str, str], str]]) -> Union[str, Response]:
-    
-    if "nonce" not in request["cookie"]  and "encrypt_cookie" not in request["cookie"]:
+
+    if "nonce" not in request["cookie"] and "encrypt_cookie" not in request["cookie"]:
         return "Your cookie is not encrypted"
 
-    ciphertext= request["cookie"]["encrypt_cookie"].encode()
-    nonce= request["cookie"]["nonce"].encode()
+    ciphertext = request["cookie"]["encrypt_cookie"].encode()
+    nonce = request["cookie"]["nonce"].encode()
     cookie_str = de_encrypt(ciphertext, config.SECRET_KEY, nonce)
 
     if not cookie_str:
@@ -65,8 +75,9 @@ def show_encrypt_cookie(request: Dict[str, Union[Dict[str, str], str]]) -> Union
         resp = Response()
         for k, v in request["cookie"].items():
             resp.add_cookie(k, v)
-        resp.body = b"We cannot show you what's inside the secret-cookie"  
-        return resp  
+        resp.body = b"We cannot show you what's inside the secret-cookie"
+        return resp
+
 
 app = slow_serv.Server()
 # NOTE: We need "/" for the main page because it is the default file under our
@@ -76,6 +87,8 @@ app.route("/", main, accept_methods=["GET", "POST"])
 app.route("/fake_baidu", fake_baidu, accept_methods=["GET", "POST"])
 
 app.route("/modify_cookie", modify_cookie, accept_methods=["GET"])
+
+app.route("/download_file", download_file)
 
 app.route("/encrypt_cookie", encrypt_cookie)
 app.route("/show_encrypt_cookie", show_encrypt_cookie)

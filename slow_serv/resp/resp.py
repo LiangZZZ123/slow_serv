@@ -68,8 +68,8 @@ class Response:
         self.content_type = "application/javascript"
         self.body = js.encode()
 
-    def transform_file(self, file: IO, filename: str):
+    def transform_file(self, file: bytes, filename: str):
         self.content_type = "application/octet-stream"
-        self.body = file.read()
+        self.body = file
         self.content_disposition = "attachment; filename=" + filename
 

@@ -2,7 +2,7 @@ import datetime
 from slow_serv.resp.resp import Response
 
 
-def msg_from_string(response: str) -> bytes:
+def msg_created_with_string(response: str) -> bytes:
     msg = (
         "HTTP/1.1 200 OK\r\nServer: python/slowserv\r\nContent-Type: text/html\r\nExpires: "
         + datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -13,7 +13,7 @@ def msg_from_string(response: str) -> bytes:
     return msg
 
 
-def msg_from_response_obj(response: Response) -> bytes:
+def msg_created_with_response_obj(response: Response) -> bytes:
     status_code = response.status_code
     resp_head = (
         "HTTP/1.1 "
