@@ -39,7 +39,7 @@ class Response:
 
         self.cookie.append(set_cookie_text)
 
-    def del_cookie(self, key: str, path: Optional[str] = None, domain: Optional[str] = None):  # 键  # 指定路径  # 指定域名
+    def del_cookie(self, key: str, path: Optional[str] = None, domain: Optional[str] = None): 
         set_cookie_text = "Set-Cookie: " + parse.quote(key) + "=" + ""
         set_cookie_text += "; Max-Age=-1"
 

@@ -7,7 +7,7 @@ import threading
 import traceback
 import datetime
 import socket
-from time import sleep
+import time
 
 from slow_serv.resp.resp import Response
 from slow_serv.resp.msg_builder import msg_created_with_string, msg_created_with_response_obj
@@ -26,7 +26,7 @@ class Server:
         """
         self.endpoint_to_view_map = {}
 
-    def route(self, path: str, view_fn: Callable, accept_methods=["GET"]):
+    def route(self, path: str, view_fn: Callable, methods=["GET"]):
         """
         For the developer's convenience, you can register a router with multiple
         accept_method.
@@ -38,7 +38,7 @@ class Server:
         app.register(main_view, '/', accept_methods=["GET", "POST"])
 
         """
-        for method in accept_methods:
+        for method in methods:
             # Register a router "(URL, method) -> ViewFunc".
             self.endpoint_to_view_map[(path, method)] = view_fn
 
@@ -47,23 +47,33 @@ class Server:
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind((host, port))
-        sock.listen(5)
+        sock.listen(100)
+
         print("Server is running on http://" + host + ":" + str(port))
         while True:
+            # Here, "sock" is monitoring the (IP, port), it's blocking, but
+            # its OK. "sock" is waiting for the first fd(A successful TCP
+            # handshake) to comes in.
+            # All in all, "listening-socket" can be blocking, but "fd-socket"
+            # should not be blocking!
             fd, addr = sock.accept()
+            # There are three ways to set a fd to nonblocking in Python, each
+            # will give a different exception if no data is available when
+            # "fd.recv()" is called.
+            # Ref: https://stackoverflow.com/questions/16745409/what-does-pythons-socket-recv-return-for-non-blocking-sockets-if-no-data-is-r
             fd.setblocking(False)
             t = threading.Thread(target=self.handle_request, args=(fd, addr, self.endpoint_to_view_map),)
             t.start()
 
     # TODO: KeepAlive
     def handle_request(
-        self, sock: socket.socket, addr: Tuple[str, int], endpoint_to_view_map: Dict, KeepAlive: bool = False
+        self, fd: socket.socket, addr: Tuple[str, int], endpoint_to_view_map: Dict, KeepAlive: bool = False
     ):
         """
             Read and parse the incoming data.
 
             TODO: 
-            1. split __handle_request__ to
+            1. split handle_request to
                 - recv_stream
                 - build_request
                 - make_response
@@ -75,7 +85,7 @@ class Server:
         END_TAG = b"\r\n\r\n"
         while True:
             try:
-                data = sock.recv(config.BUFFER_SIZE)
+                data = fd.recv(config.BUFFER_SIZE)
                 # NOTE: The doc is rather unclear about what will return (empty
                 # bytestring or empty string) if the other side close the connection,
                 # so for the sake of safety, we use "if not data" to do the judgement.
@@ -96,12 +106,13 @@ class Server:
                     if index_END_TAG != -1:
                         break
 
-            except socket.timeout as e:
-                print(e, "Nothing received, wait a bit longer")
-                sleep(0.1)
+            except BlockingIOError as e:
+                # print(total_data)
+                # print(e, f"{threading.get_ident()}|More info: Nothing received, wait a bit longer")
+                time.sleep(0.5)
                 continue
             except socket.error as e:
-                print(e, "Client socket closed during receiving http-head")
+                print(e, "|More info: Client socket closed during receiving http-head")
                 return
 
         data = b"".join(total_data)
@@ -139,13 +150,13 @@ class Server:
             # BUG: This while loop can block
             # https://stackoverflow.com/questions/16745409/what-does-pythons-socket-recv-return-for-non-blocking-sockets-if-no-data-is-r
             while True:
-                try:
-                    # It's possible that "head and body" is received in one
-                    # bucket, so do the length-check first.
-                    if body_length >= int(headers["Content-Length"]):
-                        break
+                # It's possible that "head and body" is received in one
+                # bucket, so do the length-check first.
+                if body_length >= int(headers["Content-Length"]):
+                    break
 
-                    body_continue = sock.recv(config.BUFFER_SIZE)
+                try:
+                    body_continue = fd.recv(config.BUFFER_SIZE)
 
                     # If the other side shutdown the connect
                     if not body_continue:
@@ -153,14 +164,16 @@ class Server:
 
                     body_length += len(body_continue)
                     body_in_array.append(body_continue)
-                except socket.timeout as e:
-                    print(e, "wait, wait")
-                    sleep(0.1)
+                except BlockingIOError as e:
+                    print(f"current received bytes: {body_length}", "wait, wait")
+                    time.sleep(0.5)
                     continue
                 except socket.error as e:
                     print(e, "Client socket closed during receiving http-body")
                     return
+
             body = b"".join(body_in_array)
+
         # TODO: a msg with body, no "Content-Length", with "Transfer-Encoding: chunked"
         elif "chunked" in headers.get("Transfer-Encoding", ""):
             print("`Transfer-Encoding: chunked` not supported on this server")
@@ -210,7 +223,8 @@ class Server:
                 pass
 
         try:
-            # BUG: "request" should not be a single dict, it should be two
+            # BUG: mypy gives error on current "request"'s structure,
+            # "request" should not be a single dict, it should be two
             # dicts, one is Dict[str, Dict], the other is Dict[str, str], so
             # they can represent all data types parsed from a http message.
             request: Dict[str, Union[Dict[str, str], str]] = {}
@@ -231,12 +245,12 @@ class Server:
 
             if isinstance(response, str):
                 msg = msg_created_with_string(response)
-                sock.sendall(msg)
-                sock.close()
+                fd.sendall(msg)
+                fd.close()
             else:
                 msg = msg_created_with_response_obj(response)
-                sock.sendall(msg)
-                sock.close()  # except KeyError as e:
+                fd.sendall(msg)
+                fd.close()  # except KeyError as e:
             status_code = "200"
         #     sock.send(
         #         (
@@ -249,7 +263,7 @@ class Server:
         #     status_code = "404"
         except Exception as e:
             if config.DEBUG is True:
-                sock.send(
+                fd.send(
                     (
                         "HTTP/1.1 500 ERROR\r\nServer: python/slowserv\r\nContent-Type: text/html\r\nExpires: "
                         + datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -258,14 +272,14 @@ class Server:
                     ).encode()
                 )
             else:
-                sock.send(
+                fd.send(
                     (
                         "HTTP/1.1 500 ERROR\r\nServer: python/slowserv\r\nContent-Type: text/html\r\nExpires: "
                         + datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
                         + "\r\nConnection: close\r\n\r\n500 error"
                     ).encode()
                 )
-            sock.close()
+            fd.close()
             status_code = "500"
-        print(method + " " + url + " " + status_code + " " + addr[0])
+        print(method + " " + url + " " + status_code + " " + addr[0] + f"; threading ID: {threading.get_ident()}")
 

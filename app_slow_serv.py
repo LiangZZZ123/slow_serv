@@ -82,11 +82,11 @@ def show_encrypt_cookie(request: Dict[str, Union[Dict[str, str], str]]) -> Union
 app = slow_serv.Server()
 # NOTE: We need "/" for the main page because it is the default file under our
 # top level domain
-app.route("/", main, accept_methods=["GET", "POST"])
+app.route("/", main, methods=["GET", "POST"])
 # "/" and "/fake_baidu" are on the same levels in our file structure
-app.route("/fake_baidu", fake_baidu, accept_methods=["GET", "POST"])
+app.route("/fake_baidu", fake_baidu, methods=["GET", "POST"])
 
-app.route("/modify_cookie", modify_cookie, accept_methods=["GET"])
+app.route("/modify_cookie", modify_cookie, methods=["GET"])
 
 app.route("/download_file", download_file)
 
@@ -94,4 +94,5 @@ app.route("/encrypt_cookie", encrypt_cookie)
 app.route("/show_encrypt_cookie", show_encrypt_cookie)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(port=5000, host="localhost", debug=True)
+    # app.run(debug=True)
