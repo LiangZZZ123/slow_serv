@@ -32,7 +32,9 @@ def test_main_get():
 
 
 def test_main_post():
-    _, output = subprocess.getstatusoutput("curl localhost:5000 -d 'city=Ning Bo' -i -s")
+    _, output = subprocess.getstatusoutput(
+        "curl localhost:5000 -d 'city=Ning Bo' -i -s"
+    )
     assert "Content-Type: text/plain" in output
     assert "Received a POST, with post form: {'city': 'Ning Bo'}" in output
 
@@ -44,9 +46,18 @@ def test_fake_baidu_get():
 
 
 def test_modify_cookie_get():
-    _, output = subprocess.getstatusoutput("curl --cookie 'k1=v1; k2=v2; k3=v3' localhost:5000/modify_cookie -i -s")
+    _, output = subprocess.getstatusoutput(
+        "curl --cookie 'k1=v1;k2=v2' localhost:5000/modify_cookie -i -s"
+    )
 
-    assert "Set-Cookie: k1=hahaha%2C%20things%20are%20mixed%20up%21" in output
+    assert "Set-Cookie: k1=kkk\nSet-Cookie: k2=kkk\n" in output
+
+
+def test_add_cookie_get():
+    _, output = subprocess.getstatusoutput(
+        "curl --cookie 'k1=v1;k2=v2' localhost:5000/add_cookie -i -s"
+    )
+    assert "Set-Cookie: c1=1\nSet-Cookie: c2=2\nSet-Cookie: c3=3\n" in output
 
 
 def test_download_file_get():

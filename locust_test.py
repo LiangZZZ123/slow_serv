@@ -24,32 +24,6 @@ requests while the other two servers endure almost 50% of failures.
 It's evident that Sanic should have better performance than the other two 
 servers because it uses multiplexing for IO, while the other two use multi-
 threads. 
-
-The main drawback of multithreads lies in that when a thread call "data = fd.recv()",
-the fd goes from userspace to kernelspace, invokes a syscall to visit the system-
-tcp-cache, then return back to usperspace to assign the result to "data", this
-can be followed by a lot of useless "while True" loop if a fd find that there
-is no corresponding packet aviailable for him in system-tcp-cache.
-
-I tried to add "time.sleep(0.5)" when a fd find that there
-is no corresponding packet aviailable for him in system-tcp-cache, so that 
-the current thread can stop useless loop and hand over CPU to other threads.
-But this introduces in another problem: if the packet for this fd arrives
-in system-tcp-cache right after the thread(of fd) doing sleep, the possibility
-(of other fds getting their packets fro system-tcp-cache) decreases.
-
-Eg: image system-tcp-cache as a length-fixed array:
-
-[packet_for_fd1, packet_for_fd2, packet_for_fd3]
-
-- fd4 checks the cache and finds that there's no packet for him, so thread_of_fd4
-does sleep(0.5). But right after this, fd3 gets the packet from the cache, and 
-packet_for_fd4 comes in the the cache. Now system-tcp-cache becomes:
-
-[packet_for_fd1, packet_for_fd2, packet_for_fd4]
-
-and packet_for_fd4 will not be read at least in the incoming 0.5s, which
-decreases the possibility of other fds reading their packets.
 """
 
 from locust import HttpUser, TaskSet, between, task

@@ -8,9 +8,11 @@ import traceback
 import datetime
 import socket
 import time
+import logging
 
 from slow_serv.resp.resp import Response
-from slow_serv.resp.msg_builder import msg_created_with_string, msg_created_with_response_obj
+from slow_serv.req.req import Request
+from slow_serv.resp.resp_msg_builder import msg_created_with_response_obj
 from slow_serv import config
 from slow_serv.recv_tcp.recv_tcp_framing import recv_http_head
 
@@ -49,25 +51,42 @@ class Server:
         sock.bind((host, port))
         sock.listen(100)
 
-        print("Server is running on http://" + host + ":" + str(port))
+        logging.info("Server is running on http://" + host + ":" + str(port))
         while True:
-            # Here, "sock" is monitoring the (IP, port), it's blocking, but
-            # its OK. "sock" is waiting for the first fd(A successful TCP
-            # handshake) to comes in.
-            # All in all, "listening-socket" can be blocking, but "fd-socket"
-            # should not be blocking!
             fd, addr = sock.accept()
-            # There are three ways to set a fd to nonblocking in Python, each
-            # will give a different exception if no data is available when
-            # "fd.recv()" is called.
-            # Ref: https://stackoverflow.com/questions/16745409/what-does-pythons-socket-recv-return-for-non-blocking-sockets-if-no-data-is-r
-            fd.setblocking(False)
-            t = threading.Thread(target=self.handle_request, args=(fd, addr, self.endpoint_to_view_map),)
+            """
+            Here, "sock" is monitoring the (IP, port), it's blocking, but
+            its OK. "sock" is waiting for the first fd(A successful TCP
+            handshake) to comes in.
+            All in all, "listening-socket" can be blocking, but "fd-socket"
+            should not be blocking!
+            
+            **Why use nonblocking fd**:
+                If "fd" is blocking, and the packet for this "fd" in system-tcp-cache is not 
+            ready, then "While True: data = fd.recv()" may be blocked during the while CPU
+            time slice allocated to this thread. 
+                So a better choice is using nonblocking fd, "fd.recv()" would immediately 
+            raise "errno.EWOULDBLOCK or errno.EAGAIN" if no packet are available in system-
+            tcp-cache. Then in handling-exception you just call "time.sleep(0)" to switch 
+            the thread.
+
+            There are three ways to set a fd to nonblocking in Python, each
+            will give a different exception if no data is available when
+            "fd.recv()" is called.
+            Ref: https://stackoverflow.com/questions/16745409/what-does-pythons-socket-recv-return-for-non-blocking-sockets-if-no-data-is-r
+            """
+            t = threading.Thread(
+                target=self.handle_request, args=(fd, addr, self.endpoint_to_view_map),
+            )
             t.start()
 
     # TODO: KeepAlive
     def handle_request(
-        self, fd: socket.socket, addr: Tuple[str, int], endpoint_to_view_map: Dict, KeepAlive: bool = False
+        self,
+        fd: socket.socket,
+        addr: Tuple[str, int],
+        endpoint_to_view_map: Dict,
+        KeepAlive: bool = False,
     ):
         """
             Read and parse the incoming data.
@@ -79,10 +98,13 @@ class Server:
                 - make_response
                 - handle_exception
             """
-        # HACK: do nonblocking while loop to makes sure that we receive the
-        # whole http head in "data".
+        # HACK: Why cannot we do multithreads + nonblocking-socket + sleep() here,
+        # this really confuses me!
+        # fd.setblocking(False)
+
         total_data = []
         END_TAG = b"\r\n\r\n"
+        count = 0
         while True:
             try:
                 data = fd.recv(config.BUFFER_SIZE)
@@ -106,13 +128,12 @@ class Server:
                     if index_END_TAG != -1:
                         break
 
-            except BlockingIOError as e:
-                # print(total_data)
-                # print(e, f"{threading.get_ident()}|More info: Nothing received, wait a bit longer")
-                time.sleep(0.5)
-                continue
+            # except BlockingIOError as e:
+            # logging.debug(str(e) + "| no data on http-head received, wait a bit longer")
+            #     time.sleep(1)
+            #     continue
             except socket.error as e:
-                print(e, "|More info: Client socket closed during receiving http-head")
+                logging.error(str(e) + "| error during receiving http head")
                 return
 
         data = b"".join(total_data)
@@ -164,31 +185,31 @@ class Server:
 
                     body_length += len(body_continue)
                     body_in_array.append(body_continue)
-                except BlockingIOError as e:
-                    print(f"current received bytes: {body_length}", "wait, wait")
-                    time.sleep(0.5)
-                    continue
+                # except BlockingIOError as e:
+                # logging.info(str(e) + "| no data on http-body received, wait wait")
+                #     time.sleep(0)
+                #     continue
                 except socket.error as e:
-                    print(e, "Client socket closed during receiving http-body")
+                    logging.error(str(e) + "| error during receiving http body")
                     return
 
             body = b"".join(body_in_array)
 
         # TODO: a msg with body, no "Content-Length", with "Transfer-Encoding: chunked"
         elif "chunked" in headers.get("Transfer-Encoding", ""):
-            print("`Transfer-Encoding: chunked` not supported on this server")
+            logging.warning("`Transfer-Encoding: chunked` not supported on this server")
             return
         elif method in ("GET", "HEAD"):
             pass
         else:
-            print("error")
+            logging.info("Cannot parse the http request")
             return
 
         # Parse the cookie data
         # By convention, we use "cookie" rather than "cookies" as the hashmap name
         cookie = {}
         if "Cookie" in headers:
-            cookie_array = headers["Cookie"].split("; ")
+            cookie_array = headers["Cookie"].split(";")
             for pair in cookie_array:
                 k, v = pair.split("=")
                 cookie[k] = v
@@ -227,47 +248,47 @@ class Server:
             # "request" should not be a single dict, it should be two
             # dicts, one is Dict[str, Dict], the other is Dict[str, str], so
             # they can represent all data types parsed from a http message.
-            request: Dict[str, Union[Dict[str, str], str]] = {}
 
-            request["cookie"] = cookie
-            request["url_parameters"] = url_parameters
-            request["post_form"] = post_form
-            request["headers"] = headers
-            request["body"] = body.decode()
-            request["method"] = "GET" if method == "HEAD" else method
+            method = "GET" if method == "HEAD" else method
+
+            request = Request(
+                method, headers, url_parameters, cookie, post_form, body.decode()
+            )
+            response = Response()
+
+            # for hook in config.BEFOR_ROUTE_HOOKS:
 
             # NOTE: since we will call view_fn by "view_fn(request)",
             # so we need to create view_fn by:
             # def view_fn_1(req):
             #     pass
-            response: Union[str, Response]
-            response = endpoint_to_view_map[(url, request["method"])](request)
 
-            if isinstance(response, str):
-                msg = msg_created_with_string(response)
-                fd.sendall(msg)
-                fd.close()
-            else:
-                msg = msg_created_with_response_obj(response)
-                fd.sendall(msg)
-                fd.close()  # except KeyError as e:
+            endpoint_to_view_map[(url, request.method)](request, response)
+
+            msg = msg_created_with_response_obj(response)
+            fd.sendall(msg)
+            fd.close()
             status_code = "200"
-        #     sock.send(
+
+        # except KeyError as e:
+        #     fd.send(
         #         (
         #             "HTTP/1.1 404 NOT FOUND\r\nServer: python/slowserv\r\nContent-Type: text/html\r\nExpires: "
         #             + datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
         #             + "\r\nConnection: close\r\n\r\n404 NOT FOUND"
         #         ).encode()
         #     )
-        #     sock.close()
+        #     fd.close()
         #     status_code = "404"
         except Exception as e:
             if config.DEBUG is True:
                 fd.send(
                     (
                         "HTTP/1.1 500 ERROR\r\nServer: python/slowserv\r\nContent-Type: text/html\r\nExpires: "
-                        + datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-                        + "\r\nConnection: close\r\n\r\n500 error\r\n\r\nlog:\r\n"
+                        + datetime.datetime.utcnow().strftime(
+                            "%a, %d %b %Y %H:%M:%S GMT"
+                        )
+                        + "\r\nConnection: close\r\n\r\n500 ERROR\r\n\r\nlog:\r\n"
                         + traceback.format_exc()
                     ).encode()
                 )
@@ -275,11 +296,22 @@ class Server:
                 fd.send(
                     (
                         "HTTP/1.1 500 ERROR\r\nServer: python/slowserv\r\nContent-Type: text/html\r\nExpires: "
-                        + datetime.datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT")
-                        + "\r\nConnection: close\r\n\r\n500 error"
+                        + datetime.datetime.utcnow().strftime(
+                            "%a, %d %b %Y %H:%M:%S GMT"
+                        )
+                        + "\r\nConnection: close\r\n\r\n500 ERROR"
                     ).encode()
                 )
             fd.close()
             status_code = "500"
-        print(method + " " + url + " " + status_code + " " + addr[0] + f"; threading ID: {threading.get_ident()}")
+        logging.info(
+            method
+            + " "
+            + url
+            + " "
+            + status_code
+            + " "
+            + addr[0]
+            # + f"; threading ID: {threading.get_ident()}"
+        )
 

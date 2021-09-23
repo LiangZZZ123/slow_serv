@@ -1,7 +1,0 @@
-HTTP/1.1 200 OK
-Server: python/slowserv
-Content-Type: text/html
-Expires: Sat, 18 Sep 2021 08:05:37 GMT
-Connection: close
-
-Received a POST, with post form: {'city': 'Ning Bo'}

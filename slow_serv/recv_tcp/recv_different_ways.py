@@ -28,7 +28,7 @@ def recv_by_timeout(the_socket:socket.socket, timeout=1)->bytes:
                 total_data.append(data)
                 start_time = time.perf_counter()
             else:
-                time.sleep(0.1)
+                time.sleep(0)
         except (socket.timeout, socket.error) as e:
             print(e)
             pass
