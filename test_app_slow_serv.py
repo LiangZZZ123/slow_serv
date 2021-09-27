@@ -45,12 +45,9 @@ def test_fake_baidu_get():
     assert "百度一下，你就知道" in output
 
 
-def test_modify_cookie_get():
-    _, output = subprocess.getstatusoutput(
-        "curl --cookie 'k1=v1;k2=v2' localhost:5000/modify_cookie -i -s"
-    )
-
-    assert "Set-Cookie: k1=kkk\nSet-Cookie: k2=kkk\n" in output
+def test_download_file_get():
+    _, output = subprocess.getstatusoutput("curl localhost:5000/download_file -i -s")
+    assert "Content-Type: application/octet-stream" in output
 
 
 def test_add_cookie_get():
@@ -60,14 +57,16 @@ def test_add_cookie_get():
     assert "Set-Cookie: c1=1\nSet-Cookie: c2=2\nSet-Cookie: c3=3\n" in output
 
 
-def test_download_file_get():
-    _, output = subprocess.getstatusoutput("curl localhost:5000/download_file -i -s")
-    assert "Content-Type: application/octet-stream" in output
+def test_modify_cookie_get():
+    _, output = subprocess.getstatusoutput(
+        "curl --cookie 'k1=v1;k2=v2' localhost:5000/modify_cookie -i -s"
+    )
+
+    assert "Set-Cookie: k1=kkk\nSet-Cookie: k2=kkk\n" in output
 
 
-def test_encrypt_cookie():
-    ...
-
-
-def test_show_encrypt_cookie():
-    ...
+def test_add_secret_cookie_using_url_parameter():
+    _, output = subprocess.getstatusoutput(
+        " curl -i localhost:5000/add_secret_cookie_using_url_parameter?a=1&b=2&c=3"
+    )
+    assert "Set-Cookie: secret_cookie=" in output

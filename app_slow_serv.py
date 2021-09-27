@@ -1,11 +1,30 @@
+"""
+The basic way of creating an web application with slow_serv is:
+
+app = slow_serv.Server()
+def main(request, response):
+    response.body="BIG APP supported by slow_serv"
+app.route("/", main)
+app.run()
+
+
+Here are some web pages created using slow_serv that you can play with.
+
+You can play with them either entering URL using a web browser or using command
+line(eg: curl). 
+
+I've included some command line script in `test_app_slow_serv.py`, running
+those scripts manually will give you a better understing of how slow_serv can
+work!
+"""
+
 import logging
-from typing import Dict, TypeVar, Union
+from typing import Dict, List, TypeVar, Union
+
 from slow_serv import slow_serv
 from slow_serv.resp.resp import Response
 from slow_serv.req.req import Request
-from slow_serv.secret_cookie import encrypt, decrypt
-import json
-import config
+from slow_serv.hooks.hook_secret_cookie import cipher, decipher
 
 
 def main(request: Request, response: Response) -> Response:
@@ -15,8 +34,7 @@ def main(request: Request, response: Response) -> Response:
         data = f"Received a POST, with post form: {request.post_form}"
 
     response.set_text(data)
-    response.content_type = "text/plain"
-    
+
     return response
 
 
@@ -28,21 +46,6 @@ def fake_baidu(request: Request, response: Response) -> Response:
     return response
 
 
-def modify_cookie(request: Request, response: Response) -> Response:
-    for k, v in request.cookie.items():
-        response.add_cookie(k, "kkk")
-
-    return response
-
-def add_cookie(request: Request, response: Response) -> Response:
-    response.add_cookie('c1', "1")
-    response.add_cookie('c2', "2")
-    response.add_cookie('c3', "3")
-
-    return response
-
-
-
 def download_file(request: Request, response: Response) -> Response:
     filename = "./static_files/amazing_file.txt"
     with open(filename, "rb") as f:
@@ -50,34 +53,37 @@ def download_file(request: Request, response: Response) -> Response:
     return response
 
 
-def encrypt_cookie(request: Request, response: Response) -> Response:
-
-    if not request.cookie:
-        request.cookie = {"1": "aa", "2": "bb", "3": "cc"}
-
-    cookie_str = json.dumps(request.cookie)
-    ciphertext, nonce = encrypt(cookie_str, config.SECRET_KEY)
-    response.add_cookie("encrypt_cookie", ciphertext.decode())
-    response.add_cookie("nonce", nonce.decode())
+def add_cookie(request: Request, response: Response) -> Response:
+    response.cookie["c1"] = "1"
+    response.cookie["c2"] = "2"
+    response.cookie["c3"] = "3"
 
     return response
 
 
-def show_encrypt_cookie(request: Request, response: Response) -> Response:
+def modify_cookie(request: Request, response: Response) -> Response:
+    for k, v in request.cookie.items():
+        response.cookie[k] = "kkk"
 
-    if "nonce" not in request.cookie and "encrypt_cookie" not in request.cookie:
-        response.body = "Your cookie is not encrypted"
+    return response
 
-    ciphertext = request.cookie["encrypt_cookie"].encode()
-    nonce = request.cookie["nonce"].encode()
-    cookie_str = decrypt(ciphertext, config.SECRET_KEY, nonce)
 
-    if not cookie_str:
-        response.body = "Your encrypt-cookie has been tempered !!!"
-    else:
-        for k, v in request.cookie.items():
-            response.add_cookie(k, v)
-        response.body = "We cannot show you what's inside the secret-cookie"
+def add_secret_cookie_using_url_parameter(
+    request: Request, response: Response
+) -> Response:
+
+    response.cookie['name'] = "Leo"
+
+    for k, v in request.url_parameters.items():
+        response.secret_cookie[k] = v
+
+    array: List[str] = []
+    for k, v in response.secret_cookie.items():
+        array.append(f"<tr><td>{k}</td><td>{v}</td></tr>")
+
+    kv_str = "".join(array)
+    response.body = f"<table><tr><td>secret_cookie_key</td><td>secret_cookie_val</td></tr>{kv_str}</table>"
+
     return response
 
 
@@ -88,13 +94,16 @@ app.route("/", main, methods=["GET", "POST"])
 # "/" and "/fake_baidu" are on the same levels in our file structure
 app.route("/fake_baidu", fake_baidu, methods=["GET", "POST"])
 
-app.route("/modify_cookie", modify_cookie, methods=["GET"])
-app.route("/add_cookie", add_cookie, methods=["GET"])
-
 app.route("/download_file", download_file)
 
-app.route("/encrypt_cookie", encrypt_cookie)
-app.route("/show_encrypt_cookie", show_encrypt_cookie)
+app.route("/add_cookie", add_cookie, methods=["GET"])
+app.route("/modify_cookie", modify_cookie, methods=["GET"])
+app.route(
+    "/add_secret_cookie_using_url_parameter",
+    add_secret_cookie_using_url_parameter,
+    methods=["GET"],
+)
+
 
 if __name__ == "__main__":
     LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"

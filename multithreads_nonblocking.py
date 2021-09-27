@@ -7,20 +7,20 @@ BUFFER_SIZE = 1024
 
 def non_blocking_server(port, hostname='localhost'):
     try:
-        sockfd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        fd = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     except socket.error as e:
         logging.critical(e)
         logging.critical('Could not open socket. Exiting.')
         sys.exit(1)
 
     try:
-        sockfd.bind((hostname, port))
-        sockfd.listen(10)
-        sockfd.setblocking(False)
+        fd.bind((hostname, port))
+        fd.listen(10)
+        fd.setblocking(False)
     except socket.error as e:
         logging.critical(e)
         logging.critical('Could not start up server. Exiting.')
-        sockfd.close()
+        fd.close()
         sys.exit(2)
 
     connected = {}
@@ -28,7 +28,7 @@ def non_blocking_server(port, hostname='localhost'):
     sending = {}
     while True:
         with suppress(BlockingIOError):
-            client, client_addr = sockfd.accept()
+            client, client_addr = fd.accept()
             logging.info('Connection from client {!r}'.format(client_addr))
             connected[client] = client_addr
             receiving[client] = b''

@@ -1,14 +1,14 @@
 """
-I used "Locust" and "wrk" for stress test (slow_serv VS flask VS sanic)
+I used "Locust" and "wrk" for load test (slow_serv VS flask VS sanic)
 
------- Do stress test with Locust -----
+------ Do load test with Locust -----
 Runing Locust on multiple cores(my CPU has 4 cores):
 ## Start master process
 $ locust -f locust_test.py --headless -u 2000 -r 500 -t 60s --master --expect-workers=3
 ## open 3 terminals and start 3 worker processes
 $ locust -f locust_test.py --worker
 
------- Do stress test with wrk ------
+------ Do load test with wrk ------
 $ ./wrk -t 5 -c 300 -d 60 --latency http://localhost:5000
 
 ------ Results ------
@@ -31,7 +31,7 @@ from locust import HttpUser, TaskSet, between, task
 
 class Tasks(TaskSet):
     def on_start(self):
-        # print("Start stress test")
+        # print("Start load test")
         ...
 
     @task(2)
@@ -44,7 +44,7 @@ class Tasks(TaskSet):
         self.client.post("/", {k: v for k, v in zip(range(2), range(2))})
 
     def on_stop(self):
-        # print("Stop stress test")
+        # print("Stop load test")
         ...
 
 
