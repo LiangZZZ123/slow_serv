@@ -3,6 +3,7 @@ import hashlib
 import logging
 import json
 from Crypto.Cipher import AES
+import cryptography
 from cryptography.fernet import Fernet
 from typing import Callable, Dict, Optional, Union
 
@@ -67,11 +68,14 @@ def cipher(plain_byte: bytes, key: bytes) -> bytes:
 def decipher(ciphered_byte: bytes, key: bytes) -> bytes:
     cipher = Fernet(key)
     try:
+        # ciphered_byte = b"12345"
         plain_byte = cipher.decrypt(ciphered_byte)
     # If decrypt fails, which means ciphered_byte must have been tampered.
-    except Exception:
+    except cryptography.fernet.InvalidToken:
         plain_byte = b""
 
+    # ciphered_byte = b'12345'
+    # plain_byte = cipher.decrypt(ciphered_byte)
     return plain_byte
 
 
@@ -96,7 +100,8 @@ def secret_cookie_before(request: Request, response: Response):
             response.secret_cookie = sc_dict
         else:
             logging.info("secret_cookie is been modified!")
-            exit()
+            # If secret_cookie has been modified, reset it to an empty dict
+            response.secret_cookie = {}
 
 
 def secret_cookie_after(request: Request, response: Response):

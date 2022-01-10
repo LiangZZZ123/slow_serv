@@ -2,7 +2,7 @@
 - [2. What's new](#2-whats-new)
 - [3. Details](#3-details)
   - [3.1. Packet framing from tcp-packet to http-data](#31-packet-framing-from-tcp-packet-to-http-data)
-  - [3.2. Multi-threading with non-blocking fd](#32-multi-threading-with-non-blocking-fd)
+  - [3.2. Multi-threading without using globals](#32-multi-threading-without-using-globals)
   - [3.3. Client-side-encrypted-cookie](#33-client-side-encrypted-cookie)
     - [3.3.1. Some safety concerns](#331-some-safety-concerns)
     - [3.3.2. How to use Client-side-encrypted-cookie](#332-how-to-use-client-side-encrypted-cookie)
@@ -27,7 +27,7 @@ I got the prototype from this project:
 
 Main changes of my project comparing to the prototype:
 - Framing from TCP segment to HTTP message;
-- Multi-threading with non-blocking fd;
+- Multi-threading without using globals;
 - Client-side-encrypted-cookie;
 - Add before-route-hooks and after-route-hooks;
 
@@ -47,19 +47,19 @@ This is mainly for myself to practice framing data from transport layer(raw TCP 
 
 Till now, framing over `Transfer-Encoding: chunked` has not been finished.
 
-## 3.2. Multi-threading with non-blocking fd
-I do this for practicing socket programing upon Python socket API, which is a mere encapsulation over C socket API. I was always wondering if multi-threading can be coupled with blocking fd or non-blocking fd, so just give it a try.
+## 3.2. Multi-threading without using globals
+I don't really like the style of **global variable + local threads** for implementing multi-thread, my preference is encapsulating all info in a `Request` object and a `Response` object and pass these two parameters to every view function, just like `def main(request, response): ...`.
 
-Later, I will update this to multiplexing socket communication.
+And of course, multi threads is kind of an old fashioned schema nowadays for an IO intensive application, and later I will try using `yield` primitives to build an asynchronous framework.
 
 ## 3.3. Client-side-encrypted-cookie
-IF you wanna store info on the client side, meanwhile hide the info from the user(and the hacker), client-side-encrypted-cookie can be an option. 
+IF you wanna store info on the client side, meanwhile hide the info from the user(and the hacker), you may take **client-side-encrypted-cookie** as an option. 
 
 It can be stored in cookie or LocalStorage:
   - Store in cookie (**I choose for simplicity**)
     - pros: client request will take with it in the header automatically
     - cons: size limit to 4KB
-  - store in LocalStorge
+  - store in LocalStorage
     - pros: unlimited size; flexibility to manipulate
     - cons: extra js to send the data, need work on both backend and frontend
 

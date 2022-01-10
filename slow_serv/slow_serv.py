@@ -206,7 +206,6 @@ class Server:
         cookie = {}
         if "Cookie" in headers:
             cookie_str_array: List[str] = headers["Cookie"].split(";")
-            print(cookie_str_array)
             for string in cookie_str_array:
                 k, v = string.split("=", 1)
                 cookie[k] = v

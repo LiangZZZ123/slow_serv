@@ -1,14 +1,11 @@
 from slow_serv.resp.cookie import Cookie, CookieItem
 from typing import Dict, Hashable, List
 
-# __all__ = ["Response"]
-
 
 class Response:
     """
-    In every view_fn, you should either:
-    1. create a Response instance and return it;
-    2. return a string, as the body of response message. 
+    The object that contains all the data needed for building a HTTP response
+    message.
     """
 
     def __init__(self):
